@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MetaScalp · Changelog Generator</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Unbounded:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0d0d12;
+  --bg2: #13131c;
+  --bg3: #1c1c28;
+  --border: #2c2c3e;
+  --accent: #7c6dfa;
+  --green: #27c98f;
+  --yellow: #f0b429;
+  --red: #f05656;
+  --text: #ddddf0;
+  --text2: #7777a0;
+  --r: 10px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  min-height: 100vh;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  top: 0; left: 0; right: 0; height: 320px;
+  background: radial-gradient(ellipse 70% 100% at 50% -20%, rgba(124,109,250,0.07) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.page { max-width: 820px; margin: 0 auto; padding: 40px 20px 80px; position: relative; }
+
+/* Header */
+.header { margin-bottom: 36px; }
+.header-top { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+.brand { font-family: 'Unbounded', sans-serif; font-size: 18px; font-weight: 700; color: var(--text); }
+.brand span { color: var(--accent); }
+.subtitle { color: var(--text2); font-size: 12px; }
+
+/* Tabs */
+.tabs { display: flex; gap: 3px; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r); padding: 3px; margin-bottom: 20px; }
+.tab { flex: 1; text-align: center; padding: 9px 12px; border-radius: 8px; border: none; background: transparent; color: var(--text2); font-family: 'JetBrains Mono', monospace; font-size: 12px; cursor: pointer; transition: all .18s; white-space: nowrap; }
+.tab.active { background: var(--bg3); color: var(--text); border: 1px solid var(--border); }
+.tab:hover:not(.active) { color: var(--text); }
+
+.panel { display: none; }
+.panel.active { display: flex; flex-direction: column; gap: 14px; }
+
+/* Cards */
+.card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r); padding: 20px; }
+.card-label { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--text2); margin-bottom: 12px; }
+
+/* Inputs */
+input[type=text], textarea, select {
+  width: 100%; background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 7px; color: var(--text); font-family: 'JetBrains Mono', monospace;
+  font-size: 13px; padding: 10px 13px; outline: none; transition: border-color .18s;
+}
+input[type=text]:focus, textarea:focus, select:focus { border-color: var(--accent); }
+select option { background: var(--bg3); }
+textarea { resize: vertical; min-height: 90px; line-height: 1.6; }
+
+/* Version row */
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field label { font-size: 11px; color: var(--text2); }
+
+/* Beta/Prod toggle */
+.build-toggle { display: flex; gap: 4px; }
+.build-btn { flex: 1; padding: 9px; border-radius: 7px; border: 1px solid var(--border); background: var(--bg3); color: var(--text2); font-family: 'JetBrains Mono', monospace; font-size: 12px; cursor: pointer; transition: all .18s; text-align: center; }
+.build-btn.active-beta { background: rgba(240,180,41,0.1); border-color: var(--yellow); color: var(--yellow); }
+.build-btn.active-prod { background: rgba(39,201,143,0.1); border-color: var(--green); color: var(--green); }
+
+/* Upload */
+.upload-zone { border: 1.5px dashed var(--border); border-radius: var(--r); padding: 32px; text-align: center; cursor: pointer; transition: all .18s; position: relative; }
+.upload-zone:hover, .upload-zone.over { border-color: var(--accent); background: rgba(124,109,250,0.04); }
+.upload-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.upload-icon { font-size: 28px; margin-bottom: 8px; }
+.upload-hint { color: var(--text2); font-size: 12px; }
+.upload-hint strong { color: var(--text); }
+.upload-ok { color: var(--green); font-size: 12px; margin-top: 6px; }
+
+/* Add button */
+.btn-add { width: 100%; padding: 8px; background: transparent; border: 1px dashed var(--border); border-radius: 7px; color: var(--text2); font-family: 'JetBrains Mono', monospace; font-size: 12px; cursor: pointer; transition: all .18s; margin-top: 6px; }
+.btn-add:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Generate */
+.btn-gen { width: 100%; padding: 13px; background: var(--accent); border: none; border-radius: var(--r); color: #fff; font-family: 'Unbounded', sans-serif; font-size: 12px; font-weight: 700; letter-spacing: .05em; cursor: pointer; transition: all .18s; }
+.btn-gen:hover { background: #9585fb; box-shadow: 0 6px 20px rgba(124,109,250,.35); }
+.btn-gen:disabled { opacity: .4; cursor: not-allowed; box-shadow: none; }
+
+/* Loading */
+.loading { display: none; text-align: center; padding: 28px; color: var(--text2); }
+.loading.show { display: block; }
+.spin { display: inline-block; width: 28px; height: 28px; border: 2.5px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; margin-bottom: 10px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Result */
+.result { display: none; }
+.result.show { display: block; }
+.result-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+.result-title { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--text2); }
+.btn-copy { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; color: var(--text2); font-family: 'JetBrains Mono', monospace; font-size: 12px; padding: 7px 13px; cursor: pointer; transition: all .18s; }
+.btn-copy:hover, .btn-copy.ok { border-color: var(--green); color: var(--green); }
+.result-text { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 18px; white-space: pre-wrap; line-height: 1.75; color: var(--text); min-height: 80px; }
+
+/* Beta notice */
+.beta-notice { background: rgba(240,180,41,0.08); border: 1px solid rgba(240,180,41,0.25); border-radius: 8px; padding: 12px 14px; font-size: 12px; color: var(--yellow); display: none; }
+.beta-notice.show { display: block; }
+
+/* Feedback */
+.feedback-card { display: none; }
+.feedback-card.show { display: block; }
+.feedback-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.feedback-label { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--text2); }
+.feedback-hint { font-size: 11px; color: var(--text2); margin-bottom: 8px; }
+.btn-save-feedback { margin-top: 8px; padding: 9px 18px; background: transparent; border: 1px solid var(--green); border-radius: 7px; color: var(--green); font-family: 'JetBrains Mono', monospace; font-size: 12px; cursor: pointer; transition: all .18s; }
+.btn-save-feedback:hover { background: rgba(39,201,143,.08); }
+
+/* Memory list */
+.memory-section { margin-top: 24px; }
+.memory-title { font-family: 'Unbounded', sans-serif; font-size: 11px; font-weight: 700; color: var(--text2); margin-bottom: 10px; letter-spacing: .05em; }
+.memory-item { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; font-size: 12px; line-height: 1.6; }
+.memory-item-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+.mem-key { font-weight: 700; color: var(--accent); }
+.mem-build { font-size: 10px; padding: 2px 8px; border-radius: 10px; }
+.mem-build.beta { background: rgba(240,180,41,.1); color: var(--yellow); border: 1px solid rgba(240,180,41,.25); }
+.mem-build.prod { background: rgba(39,201,143,.1); color: var(--green); border: 1px solid rgba(39,201,143,.25); }
+.mem-text { color: var(--text2); white-space: pre-wrap; }
+.mem-del { margin-left: auto; background: transparent; border: none; color: var(--text2); cursor: pointer; font-size: 14px; padding: 2px 6px; border-radius: 4px; }
+.mem-del:hover { color: var(--red); }
+.empty-memory { color: var(--text2); font-size: 12px; padding: 20px; text-align: center; border: 1px dashed var(--border); border-radius: 8px; }
+
+/* Error */
+.err { display: none; background: rgba(240,86,86,.08); border: 1px solid rgba(240,86,86,.25); border-radius: 7px; padding: 10px 13px; color: var(--red); font-size: 12px; margin-top: 6px; }
+.err.show { display: block; }
+
+/* Announce type buttons */
+.ann-types { display: flex; flex-wrap: wrap; gap: 6px; }
+.ann-type-btn { padding: 7px 12px; border-radius: 7px; border: 1px solid var(--border); background: var(--bg3); color: var(--text2); font-family: 'JetBrains Mono', monospace; font-size: 11px; cursor: pointer; transition: all .18s; }
+.ann-type-btn:hover { border-color: var(--accent); color: var(--text); }
+.ann-type-btn.active { border-color: var(--accent); background: rgba(124,109,250,.12); color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="header">
+    <div class="header-top">
+      <div class="brand">MetaScalp <span>·</span> Changelog</div>
+    </div>
+    <div class="subtitle">Внутренний инструмент команды для генерации ченджлогов и объявлений</div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('tasks')">Задачи</button>
+    <button class="tab" onclick="switchTab('pdf')">PDF релиза</button>
+    <button class="tab" onclick="switchTab('announce')">Объявление</button>
+    <button class="tab" onclick="switchTab('memory')">История</button>
+  </div>
+
+  <!-- ══════════ TASKS ══════════ -->
+  <div id="panel-tasks" class="panel active">
+
+    <div class="card">
+      <div class="card-label">Тип сборки</div>
+      <div class="build-toggle">
+        <button class="build-btn active-beta" id="btn-beta" onclick="setBuild('beta')">Beta</button>
+        <button class="build-btn" id="btn-prod" onclick="setBuild('prod')">Production</button>
+        <button class="build-btn" id="btn-both" onclick="setBuild('both')">Beta + Prod</button>
+      </div>
+    </div>
+
+    <div class="beta-notice" id="tasks-beta-notice"></div>
+
+    <div class="card">
+      <div class="card-label">Версия релиза</div>
+      <input type="text" id="tasks-version" placeholder="1.0.250" oninput="onVersionInput()">
+    </div>
+
+    <div class="card">
+      <div class="card-label">Номера задач (через запятую или по одной)</div>
+      <input type="text" id="tasks-input" placeholder="MET-619, MET-621, MET-624" oninput="onTasksInput()">
+    </div>
+
+    <div class="card" style="display:none" id="tasks-extra-card">
+      <div class="card-label">Дополнительные заметки (необязательно)</div>
+      <textarea id="tasks-extra" placeholder="Ссылки на видео, уточнения, фичи без задач..."></textarea>
+    </div>
+    <button class="btn-add" onclick="document.getElementById('tasks-extra-card').style.display='block';this.style.display='none'">+ Добавить заметки</button>
+
+    <button class="btn-gen" id="tasks-btn" onclick="generate('tasks')">Сгенерировать ченджлог</button>
+    <div class="err" id="tasks-err"></div>
+  </div>
+
+  <!-- ══════════ PDF ══════════ -->
+  <div id="panel-pdf" class="panel">
+
+    <div class="card">
+      <div class="card-label">Тип сборки</div>
+      <div class="build-toggle">
+        <button class="build-btn active-beta" id="btn-beta-pdf" onclick="setBuildPdf('beta')">Beta</button>
+        <button class="build-btn" id="btn-prod-pdf" onclick="setBuildPdf('prod')">Production</button>
+        <button class="build-btn" id="btn-both-pdf" onclick="setBuildPdf('both')">Beta + Prod</button>
+      </div>
+    </div>
+
+    <div class="beta-notice" id="pdf-beta-notice"></div>
+
+    <div class="card">
+      <div class="card-label">Версия релиза</div>
+      <input type="text" id="pdf-version" placeholder="1.0.250">
+    </div>
+
+    <div class="card">
+      <div class="card-label">PDF с задачами</div>
+      <div class="upload-zone" id="upload-zone">
+        <input type="file" accept=".pdf" onchange="handlePdf(event)" id="pdf-file">
+        <div class="upload-icon">📄</div>
+        <div class="upload-hint"><strong>Нажмите или перетащите PDF</strong></div>
+        <div class="upload-ok" id="pdf-fname"></div>
+      </div>
+    </div>
+
+    <div class="card" style="display:none" id="pdf-extra-card">
+      <div class="card-label">Дополнительные заметки (необязательно)</div>
+      <textarea id="pdf-extra" placeholder="Ссылки на видео, уточнения..."></textarea>
+    </div>
+    <button class="btn-add" onclick="document.getElementById('pdf-extra-card').style.display='block';this.style.display='none'">+ Добавить заметки</button>
+
+    <button class="btn-gen" onclick="generate('pdf')">Сгенерировать ченджлог</button>
+    <div class="err" id="pdf-err"></div>
+  </div>
+
+  <!-- ══════════ ANNOUNCE ══════════ -->
+  <div id="panel-announce" class="panel">
+    <div class="card">
+      <div class="card-label">Тип объявления</div>
+      <div class="ann-types">
+        <button class="ann-type-btn active" onclick="setAnnType(this,'problem')">⚠ Проблема</button>
+        <button class="ann-type-btn" onclick="setAnnType(this,'resolved')">✅ Устранено</button>
+        <button class="ann-type-btn" onclick="setAnnType(this,'maintenance')">🛠 Техработы</button>
+        <button class="ann-type-btn" onclick="setAnnType(this,'feature')">🚀 Фича</button>
+        <button class="ann-type-btn" onclick="setAnnType(this,'guide')">📖 Гайд</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-label">Суть</div>
+      <input type="text" id="ann-topic" placeholder="Напр.: проблемы с ордерами на Gate">
+    </div>
+    <div class="card">
+      <div class="card-label">Подробности</div>
+      <textarea id="ann-details" style="min-height:120px" placeholder="Что происходит, что видит пользователь, что делается, ссылки..."></textarea>
+    </div>
+    <button class="btn-gen" onclick="generate('announce')">Сгенерировать объявление</button>
+    <div class="err" id="ann-err"></div>
+  </div>
+
+  <!-- ══════════ MEMORY ══════════ -->
+  <div id="panel-memory" class="panel">
+    <div class="card">
+      <div class="card-label">История задач (Beta → Prod)</div>
+      <div id="memory-list"></div>
+    </div>
+  </div>
+
+  <!-- Loading -->
+  <div class="loading" id="loading" style="margin-top:14px">
+    <div class="spin"></div>
+    <div id="loading-msg">Генерирую...</div>
+  </div>
+
+  <!-- Result -->
+  <div class="result card" id="result" style="margin-top:14px">
+    <div class="result-head">
+      <div class="result-title">Готовый текст</div>
+      <button class="btn-copy" id="copy-btn" onclick="copyResult()">Скопировать</button>
+    </div>
+    <div class="result-text" id="result-text"></div>
+  </div>
+
+  <!-- Feedback -->
+  <div class="feedback-card card" id="feedback-card" style="margin-top:14px">
+    <div class="feedback-head">
+      <div class="feedback-label">Корректировка</div>
+    </div>
+    <div class="feedback-hint">Скинь правильную версию ченджлога — я запомню стиль и буду использовать его в следующий раз.</div>
+    <textarea id="feedback-text" placeholder="Вставь сюда финальный правильный текст ченджлога..."></textarea>
+    <button class="btn-save-feedback" onclick="saveFeedback()">Сохранить как образец</button>
+  </div>
+
+</div>
+
+<script>
+// ─── State ──────────────────────────────────────────────
+let buildMode = 'beta'; // tasks tab
+let buildModePdf = 'beta'; // pdf tab
+let pdfBase64 = null;
+let lastTaskKeys = [];
+let lastBuildMode = '';
+let lastVersion = '';
+let lastResultText = '';
+
+// Memory: { key: string (MET-XXX), build: 'beta'|'prod', text: string, version: string }[]
+function getMemory() {
+  try { return JSON.parse(localStorage.getItem('ms_memory') || '[]'); } catch { return []; }
+}
+function saveMemory(m) { localStorage.setItem('ms_memory', JSON.stringify(m)); }
+
+// Feedback examples
+function getFeedbackExamples() {
+  try { return JSON.parse(localStorage.getItem('ms_feedback') || '[]'); } catch { return []; }
+}
+function saveFeedbackExamples(f) { localStorage.setItem('ms_feedback', JSON.stringify(f)); }
+
+// ─── Tabs ────────────────────────────────────────────────
+function switchTab(name) {
+  ['tasks','pdf','announce','memory'].forEach((t, i) => {
+    document.querySelectorAll('.tab')[i].classList.toggle('active', t === name);
+    document.getElementById('panel-' + t).classList.toggle('active', t === name);
+  });
+  document.getElementById('result').classList.remove('show');
+  document.getElementById('loading').classList.remove('show');
+  document.getElementById('feedback-card').classList.remove('show');
+  if (name === 'memory') renderMemory();
+}
+
+// ─── Build toggle (tasks) ────────────────────────────────
+function setBuild(mode) {
+  buildMode = mode;
+  document.getElementById('btn-beta').className = 'build-btn' + (mode === 'beta' ? ' active-beta' : '');
+  document.getElementById('btn-prod').className = 'build-btn' + (mode === 'prod' ? ' active-prod' : '');
+  document.getElementById('btn-both').className = 'build-btn' + (mode === 'both' ? ' active-both' : '');
+  onVersionInput();
+}
+
+function setBuildPdf(mode) {
+  buildModePdf = mode;
+  document.getElementById('btn-beta-pdf').className = 'build-btn' + (mode === 'beta' ? ' active-beta' : '');
+  document.getElementById('btn-prod-pdf').className = 'build-btn' + (mode === 'prod' ? ' active-prod' : '');
+  document.getElementById('btn-both-pdf').className = 'build-btn' + (mode === 'both' ? ' active-both' : '');
+}
+
+// ─── Version input — check beta memory ──────────────────
+function onVersionInput() { checkBetaNotice('tasks'); }
+function onTasksInput() { checkBetaNotice('tasks'); }
+
+function checkBetaNotice(tab) {
+  if (tab !== 'tasks' || (buildMode !== 'prod' && buildMode !== 'both')) {
+    document.getElementById('tasks-beta-notice').classList.remove('show');
+    return;
+  }
+  const keys = getTaskKeys();
+  const memory = getMemory();
+  const found = keys.filter(k => memory.find(m => m.key === k && m.build === 'beta'));
+  const notice = document.getElementById('tasks-beta-notice');
+  if (found.length) {
+    notice.textContent = `⚠ Задач${found.length > 1 ? 'и' : 'а'} ${found.join(', ')} уже ${found.length > 1 ? 'были' : 'была'} в Beta — использую те же формулировки.`;
+    notice.classList.add('show');
+  } else {
+    notice.classList.remove('show');
+  }
+}
+
+function getTaskKeys() {
+  return document.getElementById('tasks-input').value
+    .split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+}
+
+// ─── PDF upload ──────────────────────────────────────────
+const zone = document.getElementById('upload-zone');
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('over'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('over'));
+zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('over'); const f = e.dataTransfer.files[0]; if (f?.type === 'application/pdf') loadPdf(f); });
+
+function handlePdf(e) { if (e.target.files[0]) loadPdf(e.target.files[0]); }
+function loadPdf(f) {
+  document.getElementById('pdf-fname').textContent = '✓ ' + f.name;
+  const r = new FileReader();
+  r.onload = () => { pdfBase64 = r.result.split(',')[1]; };
+  r.readAsDataURL(f);
+}
+
+// ─── System prompt ────────────────────────────────────────
+function buildSystem(examples) {
+  const exStr = examples.length
+    ? '\n\nПРИМЕРЫ ПРАВИЛЬНЫХ ЧЕНДЖЛОГОВ (учись у них):\n' + examples.map(e => e.text).join('\n\n---\n\n')
+    : '';
+
+  return `Ты пишешь ченджлоги для торгового терминала MetaScalp. Строго следуй стилю команды.
+
+ФОРМАТ:
+Обновление 💯MetaScalp [тип] Version [версия]
+
+(блок "🚀 Новые возможности" — если есть новые фичи)
+🚀 Новые возможности
+➕ ...
+
+(блок "⚙️ Исправления:" — если есть баги)
+⚙️ Исправления:
+➖ ...
+
+ПРАВИЛА:
+- Заголовок: "Обновление 💯MetaScalp Production Version X.X.XXX" или "Обновление 💯Metascalp Beta vX.X.XXX"
+- Каждый пункт — ➕ для фич, ➖ для багфиксов
+- Язык: русский, прошедшее время для багов ("сбрасывалось", "не отображалась", "зависал")
+- Для фич — назывные предложения ("Добавлена поддержка X") или краткое что добавили
+- Указывай конкретику: биржа, окно, режим, условие воспроизведения
+- Технические задачи (рефакторинг, QA-регрессия, внутренние задачи) — НЕ включать
+- НЕ добавляй пояснений или вопросов — только готовый текст
+
+ЭМОДЗИ БИРЖ:
+💯 MetaScalp | 🔶 Binance (Spot/Margin/Futures) | 😵‍💫 Hyperliquid | ❗️ Bybit | 🤝 Gate | 😎 KuCoin | 😯 MEXC | 🤨 XT / HTX / Lighter | 🔥 Binance Alpha
+${exStr}`;
+}
+
+function buildAnnounceSystem() {
+  return `Ты пишешь объявления для пользователей торгового терминала MetaScalp и сервисов Metabroker.
+
+ТИПЫ ОБЪЯВЛЕНИЙ И ИХ СТИЛЬ:
+
+1. ПРОБЛЕМА / СБОЙ
+Заголовок: "Внимание: [суть проблемы]"
+Структура: что происходит → что видит пользователь → что делается → обещание сообщить
+Пример:
+Внимание: проблемы на стороне биржи Gate
+
+В данный момент на стороне биржи Gate наблюдаются сбои, из-за которых лимитные ордера и позиции в терминале могут отображаться некорректно.
+Мы уже на связи с биржей и работаем над устранением проблемы. Как только всё восстановится — сообщим дополнительно.
+Просим быть внимательными при торговле на Gate до устранения сбоя.
+
+2. РЕШЕНИЕ ПРОБЛЕМЫ
+Начинать с ✅
+Коротко: что устранено, кто подтвердил, что теперь работает. Заканчивать "Спасибо за терпение!"
+Если нужны действия от пользователя — добавить отдельной строкой.
+
+3. ТЕХНИЧЕСКИЕ РАБОТЫ
+Коротко, одна-две строки:
+🛠 Технические работы на [сервис]
+Если затягиваются: UPD: работы требуют больше времени, чем планировалось. Сообщим о завершении дополнительно.
+
+4. НОВАЯ ФИЧА / ИНТЕГРАЦИЯ
+Заголовок: название фичи или интеграции (без лишних слов)
+Описание что это и зачем. Буллеты (•) для ключевых возможностей если их несколько.
+Ссылки в конце: 📼 Видео: ... / 🔗 Ссылка: ...
+
+5. ГАЙД / ИНСТРУКЦИЯ
+Заголовок — суть.
+Подробное объяснение, структурированно. Варианты через —. Хэштег в конце (#функционалтерминала и т.п.)
+
+ОБЩИЕ ПРАВИЛА:
+- Обращение: "пользователи", "уважаемые пользователи", "дорогие пользователи" (на выбор по тону)
+- Биржи с эмодзи: 🤝Gate, 😵‍💫Hyperliquid, ❗️Bybit, 🔶Binance, 😎KuCoin, 😯MEXC
+- Сервисы: 💯Metascalp, 😜MetaMarket, 🙂ScalpBoard
+- Тон: дружелюбный, прямой, без канцелярита
+- Только готовый текст — никаких пояснений и вопросов`;
+}
+
+
+// ─── Announce type ────────────────────────────────────────
+let annType = 'problem';
+function setAnnType(btn, type) {
+  annType = type;
+  document.querySelectorAll('.ann-type-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+// ─── Generate ─────────────────────────────────────────────
+async function generate(mode) {
+  const loading = document.getElementById('loading');
+  const result = document.getElementById('result');
+  const feedback = document.getElementById('feedback-card');
+  const loadingMsg = document.getElementById('loading-msg');
+
+  // Validate & build message
+  let content = null;
+  let errId = mode + '-err';
+  hideErr(errId);
+
+  if (mode === 'tasks') {
+    const version = document.getElementById('tasks-version').value.trim();
+    const keys = getTaskKeys();
+    if (!version) { showErr('tasks-err', 'Укажи версию релиза'); return; }
+    if (!keys.length) { showErr('tasks-err', 'Введи хотя бы один номер задачи'); return; }
+
+    lastTaskKeys = keys;
+    lastBuildMode = buildMode;
+    lastVersion = version;
+
+    const memory = getMemory();
+    const betaItems = keys.filter(k => memory.find(m => m.key === k && m.build === 'beta'));
+    const betaContext = betaItems.length
+      ? '\n\nВАЖНО: Следующие задачи уже были в Beta. Используй ТОЧНО ТЕ ЖЕ формулировки:\n' +
+        betaItems.map(k => {
+          const m = memory.find(m => m.key === k && m.build === 'beta');
+          return `${k}: "${m.text}"`;
+        }).join('\n')
+      : '';
+
+    const extra = document.getElementById('tasks-extra').value.trim();
+    const type = buildMode === 'beta' ? 'Beta' : 'Production';
+    const prompt = `Напиши ченджлог для MetaScalp ${type} Version ${version}.
+Задачи из Jira (finncraft.atlassian.net): ${keys.join(', ')}
+Прочитай каждую задачу через Jira и составь ченджлог.${betaContext}${extra ? '\n\nДоп. заметки:\n' + extra : ''}`;
+
+    content = [{ type: 'text', text: prompt }];
+    loadingMsg.textContent = `Читаю задачи: ${keys.join(', ')}...`;
+
+  } else if (mode === 'pdf') {
+    const version = document.getElementById('pdf-version').value.trim();
+    if (!version) { showErr('pdf-err', 'Укажи версию релиза'); return; }
+    if (!pdfBase64) { showErr('pdf-err', 'Загрузи PDF'); return; }
+
+    lastBuildMode = buildModePdf;
+    lastVersion = version;
+    lastTaskKeys = [];
+
+    const type = buildModePdf === 'beta' ? 'Beta' : 'Production';
+    const extra = document.getElementById('pdf-extra').value.trim();
+    const prompt = `Напиши ченджлог для MetaScalp ${type} Version ${version} по этому PDF.${extra ? '\n\nДоп. заметки:\n' + extra : ''}`;
+    content = [
+      { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: pdfBase64 } },
+      { type: 'text', text: prompt }
+    ];
+    loadingMsg.textContent = 'Анализирую PDF...';
+
+  } else if (mode === 'announce') {
+    const topic = document.getElementById('ann-topic').value.trim();
+    const details = document.getElementById('ann-details').value.trim();
+    if (!topic && !details) { showErr('ann-err', 'Заполни хотя бы одно поле'); return; }
+    const typeLabels = { problem: 'Проблема/сбой', resolved: 'Устранено', maintenance: 'Технические работы', feature: 'Новая фича/интеграция', guide: 'Гайд/инструкция' };
+    content = [{ type: 'text', text: `Тип объявления: ${typeLabels[annType] || annType}\nТема: ${topic}\n\n${details}` }];
+    loadingMsg.textContent = 'Генерирую объявление...';
+  }
+
+  // Show loading
+  loading.classList.add('show');
+  result.classList.remove('show');
+  feedback.classList.remove('show');
+  document.querySelectorAll('.btn-gen').forEach(b => b.disabled = true);
+
+  try {
+    const isAnnounce = mode === 'announce';
+    const isTasks = mode === 'tasks';
+    const examples = getFeedbackExamples();
+
+    const body = {
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1000,
+      system: isAnnounce ? buildAnnounceSystem() : buildSystem(examples),
+      messages: [{ role: 'user', content }]
+    };
+
+    if (isTasks) {
+      body.mcp_servers = [{ type: 'url', url: 'https://mcp.atlassian.com/v1/mcp', name: 'atlassian-mcp' }];
+    }
+
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    if (!resp.ok) {
+      const e = await resp.json().catch(() => ({}));
+      throw new Error(e.error?.message || `HTTP ${resp.status}`);
+    }
+
+    const data = await resp.json();
+    const text = data.content.filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
+
+    lastResultText = text;
+    document.getElementById('result-text').textContent = text;
+    result.classList.add('show');
+
+    // For changelog (not announce): save to memory + show feedback
+    if (!isAnnounce) {
+      if (lastBuildMode === 'both') {
+        saveToMemory('tasks_beta', text);
+        saveToMemory('tasks_prod', text);
+      } else {
+        saveToMemory(mode, text);
+      }
+      feedback.classList.add('show');
+    }
+
+    result.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  } catch(e) {
+    showErr(mode === 'tasks' ? 'tasks-err' : mode === 'pdf' ? 'pdf-err' : 'ann-err', 'Ошибка: ' + e.message);
+  } finally {
+    loading.classList.remove('show');
+    document.querySelectorAll('.btn-gen').forEach(b => b.disabled = false);
+  }
+}
+
+// ─── Save to memory ──────────────────────────────────────
+function saveToMemory(mode, fullText) {
+  if (!lastTaskKeys.length && mode !== 'pdf') return;
+  const memory = getMemory();
+  const build = mode === 'tasks_beta' ? 'beta' : mode === 'tasks_prod' ? 'prod' : lastBuildMode;
+
+  if (lastTaskKeys.length) {
+    lastTaskKeys.forEach(key => {
+      const exists = memory.findIndex(m => m.key === key && m.build === build);
+      const entry = { key, build, version: lastVersion, text: fullText, ts: Date.now() };
+      if (exists >= 0) memory[exists] = entry;
+      else memory.unshift(entry);
+    });
+  } else {
+    const entry = { key: `PDF v${lastVersion}`, build, version: lastVersion, text: fullText, ts: Date.now() };
+    memory.unshift(entry);
+  }
+
+  saveMemory(memory.slice(0, 100));
+}
+
+// ─── Feedback ────────────────────────────────────────────
+function saveFeedback() {
+  const text = document.getElementById('feedback-text').value.trim();
+  if (!text) return;
+  const examples = getFeedbackExamples();
+  examples.unshift({ text, ts: Date.now() });
+  saveFeedbackExamples(examples.slice(0, 10)); // keep last 10 examples
+  document.getElementById('feedback-text').value = '';
+
+  // Also update memory entries with corrected text
+  if (lastTaskKeys.length) {
+    const memory = getMemory();
+    lastTaskKeys.forEach(key => {
+      const idx = memory.findIndex(m => m.key === key && m.build === lastBuildMode);
+      if (idx >= 0) memory[idx].text = text;
+    });
+    saveMemory(memory);
+  }
+
+  const btn = document.querySelector('.btn-save-feedback');
+  btn.textContent = '✓ Сохранено!';
+  setTimeout(() => { btn.textContent = 'Сохранить как образец'; }, 2000);
+}
+
+// ─── Memory render ────────────────────────────────────────
+function renderMemory() {
+  const memory = getMemory();
+  const list = document.getElementById('memory-list');
+  if (!memory.length) {
+    list.innerHTML = '<div class="empty-memory">Пока нет сохранённых задач.<br>Они появятся после первой генерации.</div>';
+    return;
+  }
+  list.innerHTML = memory.map((m, i) => `
+    <div class="memory-item">
+      <div class="memory-item-head">
+        <span class="mem-key">${m.key}</span>
+        <span class="mem-build ${m.build}">${m.build === 'beta' ? 'Beta' : 'Production'}</span>
+        <span style="color:var(--text2);font-size:11px">v${m.version}</span>
+        <button class="mem-del" onclick="deleteMemory(${i})" title="Удалить">✕</button>
+      </div>
+      <div class="mem-text">${escHtml(m.text)}</div>
+    </div>
+  `).join('');
+}
+
+function deleteMemory(i) {
+  const m = getMemory();
+  m.splice(i, 1);
+  saveMemory(m);
+  renderMemory();
+}
+
+function escHtml(t) {
+  return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ─── Copy ─────────────────────────────────────────────────
+function copyResult() {
+  navigator.clipboard.writeText(document.getElementById('result-text').textContent).then(() => {
+    const b = document.getElementById('copy-btn');
+    b.textContent = '✓ Скопировано';
+    b.classList.add('ok');
+    setTimeout(() => { b.textContent = 'Скопировать'; b.classList.remove('ok'); }, 2000);
+  });
+}
+
+// ─── Err helpers ─────────────────────────────────────────
+function showErr(id, msg) { const e = document.getElementById(id); e.textContent = '⚠ ' + msg; e.classList.add('show'); }
+function hideErr(id) { document.getElementById(id)?.classList.remove('show'); }
+</script>
+</body>
+</html>
