@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MetaScalp · Changelog Generator</title>
+<script src="config.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Unbounded:wght@400;700&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -312,16 +313,66 @@ let lastVersion = '';
 let lastResultText = '';
 
 // Memory: { key: string (MET-XXX), build: 'beta'|'prod', text: string, version: string }[]
-function getMemory() {
-  try { return JSON.parse(localStorage.getItem('ms_memory') || '[]'); } catch { return []; }
-}
-function saveMemory(m) { localStorage.setItem('ms_memory', JSON.stringify(m)); }
+// ─── GitHub storage ──────────────────────────────────────
+const GH_API = 'https://api.github.com';
 
-// Feedback examples
-function getFeedbackExamples() {
-  try { return JSON.parse(localStorage.getItem('ms_feedback') || '[]'); } catch { return []; }
+async function ghGet(path) {
+  const token = window.GH_TOKEN;
+  const repo = window.GH_REPO;
+  try {
+    const r = await fetch(`${GH_API}/repos/${repo}/contents/${path}`, {
+      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' }
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    return { content: JSON.parse(atob(d.content.replace(/\n/g,''))), sha: d.sha };
+  } catch { return null; }
 }
-function saveFeedbackExamples(f) { localStorage.setItem('ms_feedback', JSON.stringify(f)); }
+
+async function ghSave(path, data, sha) {
+  const token = window.GH_TOKEN;
+  const repo = window.GH_REPO;
+  const body = { message: 'update ' + path, content: btoa(unescape(encodeURIComponent(JSON.stringify(data, null, 2)))) };
+  if (sha) body.sha = sha;
+  await fetch(`${GH_API}/repos/${repo}/contents/${path}`, {
+    method: 'PUT',
+    headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+}
+
+// Cache
+let _memCache = null, _memSha = null;
+let _fbCache = null, _fbSha = null;
+
+async function getMemory() {
+  if (_memCache) return _memCache;
+  const r = await ghGet('data/memory.json');
+  if (r) { _memCache = r.content; _memSha = r.sha; return _memCache; }
+  return [];
+}
+
+async function saveMemory(m) {
+  _memCache = m;
+  await ghSave('data/memory.json', m, _memSha);
+  // refresh sha
+  const r = await ghGet('data/memory.json');
+  if (r) _memSha = r.sha;
+}
+
+async function getFeedbackExamples() {
+  if (_fbCache) return _fbCache;
+  const r = await ghGet('data/feedback.json');
+  if (r) { _fbCache = r.content; _fbSha = r.sha; return _fbCache; }
+  return [];
+}
+
+async function saveFeedbackExamples(f) {
+  _fbCache = f;
+  await ghSave('data/feedback.json', f, _fbSha);
+  const r = await ghGet('data/feedback.json');
+  if (r) _fbSha = r.sha;
+}
 
 // ─── Tabs ────────────────────────────────────────────────
 function switchTab(name) {
@@ -355,17 +406,17 @@ function setBuildPdf(mode) {
 function onVersionInput() { checkBetaNotice('tasks'); }
 function onTasksInput() { checkBetaNotice('tasks'); }
 
-function checkBetaNotice(tab) {
+async function checkBetaNotice(tab) {
   if (tab !== 'tasks' || (buildMode !== 'prod' && buildMode !== 'both')) {
     document.getElementById('tasks-beta-notice').classList.remove('show');
     return;
   }
   const keys = getTaskKeys();
-  const memory = getMemory();
+  const memory = await getMemory();
   const found = keys.filter(k => memory.find(m => m.key === k && m.build === 'beta'));
   const notice = document.getElementById('tasks-beta-notice');
   if (found.length) {
-    notice.textContent = `⚠ Задач${found.length > 1 ? 'и' : 'а'} ${found.join(', ')} уже ${found.length > 1 ? 'были' : 'была'} в Beta — использую те же формулировки.`;
+    notice.textContent = `⚠ Задач${found.length > 1 ? 'и' : 'а'} ${found.join(', ')} уже ${found.length > 1 ? 'были на Beta' : 'была на Beta'} — убедись, что ${found.length > 1 ? 'они готовы' : 'она готова'} к проду.`;
     notice.classList.add('show');
   } else {
     notice.classList.remove('show');
@@ -496,7 +547,7 @@ async function generate(mode) {
     lastBuildMode = buildMode;
     lastVersion = version;
 
-    const memory = getMemory();
+    const memory = await getMemory();
     const betaItems = keys.filter(k => memory.find(m => m.key === k && m.build === 'beta'));
     const betaContext = betaItems.length
       ? '\n\nВАЖНО: Следующие задачи уже были в Beta. Используй ТОЧНО ТЕ ЖЕ формулировки:\n' +
@@ -551,7 +602,7 @@ async function generate(mode) {
   try {
     const isAnnounce = mode === 'announce';
     const isTasks = mode === 'tasks';
-    const examples = getFeedbackExamples();
+    const examples = await getFeedbackExamples();
 
     const body = {
       model: 'claude-sonnet-4-20250514',
@@ -585,10 +636,10 @@ async function generate(mode) {
     // For changelog (not announce): save to memory + show feedback
     if (!isAnnounce) {
       if (lastBuildMode === 'both') {
-        saveToMemory('tasks_beta', text);
-        saveToMemory('tasks_prod', text);
+        await saveToMemory('tasks_beta', text);
+        await saveToMemory('tasks_prod', text);
       } else {
-        saveToMemory(mode, text);
+        await saveToMemory(mode, text);
       }
       feedback.classList.add('show');
     }
@@ -604,9 +655,9 @@ async function generate(mode) {
 }
 
 // ─── Save to memory ──────────────────────────────────────
-function saveToMemory(mode, fullText) {
+async function saveToMemory(mode, fullText) {
   if (!lastTaskKeys.length && mode !== 'pdf') return;
-  const memory = getMemory();
+  const memory = await getMemory();
   const build = mode === 'tasks_beta' ? 'beta' : mode === 'tasks_prod' ? 'prod' : lastBuildMode;
 
   if (lastTaskKeys.length) {
@@ -621,26 +672,26 @@ function saveToMemory(mode, fullText) {
     memory.unshift(entry);
   }
 
-  saveMemory(memory.slice(0, 100));
+  await saveMemory(memory.slice(0, 100));
 }
 
 // ─── Feedback ────────────────────────────────────────────
-function saveFeedback() {
+async function saveFeedback() {
   const text = document.getElementById('feedback-text').value.trim();
   if (!text) return;
-  const examples = getFeedbackExamples();
+  const examples = await getFeedbackExamples();
   examples.unshift({ text, ts: Date.now() });
-  saveFeedbackExamples(examples.slice(0, 10)); // keep last 10 examples
+  await saveFeedbackExamples(examples.slice(0, 10)); // keep last 10 examples
   document.getElementById('feedback-text').value = '';
 
   // Also update memory entries with corrected text
   if (lastTaskKeys.length) {
-    const memory = getMemory();
+    const memory = await getMemory();
     lastTaskKeys.forEach(key => {
       const idx = memory.findIndex(m => m.key === key && m.build === lastBuildMode);
       if (idx >= 0) memory[idx].text = text;
     });
-    saveMemory(memory);
+    await saveMemory(memory);
   }
 
   const btn = document.querySelector('.btn-save-feedback');
@@ -649,8 +700,8 @@ function saveFeedback() {
 }
 
 // ─── Memory render ────────────────────────────────────────
-function renderMemory() {
-  const memory = getMemory();
+async function renderMemory() {
+  const memory = await getMemory();
   const list = document.getElementById('memory-list');
   if (!memory.length) {
     list.innerHTML = '<div class="empty-memory">Пока нет сохранённых задач.<br>Они появятся после первой генерации.</div>';
