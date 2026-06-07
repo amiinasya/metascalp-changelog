@@ -615,7 +615,7 @@ async function generate(mode) {
       body.mcp_servers = [{ type: 'url', url: 'https://mcp.atlassian.com/v1/mcp', name: 'atlassian-mcp' }];
     }
 
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    const resp = await fetch('https://metascalp-changelog.asya-minasyan.workers.dev/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
