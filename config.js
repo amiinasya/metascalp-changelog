@@ -1,2 +1,2 @@
-window.GH_TOKEN = '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';
-window.GH_REPO = 'amiinasya/metascalp-changelog';
+// Все токены живут в секретах Cloudflare Worker — в клиенте их быть не должно.
+window.WORKER_URL = 'https://metascalp-changelog.asya-minasyan.workers.dev';

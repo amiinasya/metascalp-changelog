@@ -313,31 +313,22 @@ let lastVersion = '';
 let lastResultText = '';
 
 // Memory: { key: string (MET-XXX), build: 'beta'|'prod', text: string, version: string }[]
-// ─── GitHub storage ──────────────────────────────────────
-const GH_API = 'https://api.github.com';
+// ─── Storage через воркер (токены живут в секретах Cloudflare) ───
+const WORKER = window.WORKER_URL || 'https://metascalp-changelog.asya-minasyan.workers.dev';
 
 async function ghGet(path) {
-  const token = window.GH_TOKEN;
-  const repo = window.GH_REPO;
   try {
-    const r = await fetch(`${GH_API}/repos/${repo}/contents/${path}`, {
-      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' }
-    });
+    const r = await fetch(`${WORKER}/storage/${path.replace('data/','')}`);
     if (!r.ok) return null;
-    const d = await r.json();
-    return { content: JSON.parse(atob(d.content.replace(/\n/g,''))), sha: d.sha };
+    return await r.json(); // { content, sha }
   } catch { return null; }
 }
 
 async function ghSave(path, data, sha) {
-  const token = window.GH_TOKEN;
-  const repo = window.GH_REPO;
-  const body = { message: 'update ' + path, content: btoa(unescape(encodeURIComponent(JSON.stringify(data, null, 2)))) };
-  if (sha) body.sha = sha;
-  await fetch(`${GH_API}/repos/${repo}/contents/${path}`, {
+  await fetch(`${WORKER}/storage/${path.replace('data/','')}`, {
     method: 'PUT',
-    headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data, sha })
   });
 }
 
@@ -534,6 +525,7 @@ async function generate(mode) {
 
   // Validate & build message
   let content = null;
+  let tasksBetaContext = '';
   let errId = mode + '-err';
   hideErr(errId);
 
@@ -549,7 +541,7 @@ async function generate(mode) {
 
     const memory = await getMemory();
     const betaItems = keys.filter(k => memory.find(m => m.key === k && m.build === 'beta'));
-    const betaContext = betaItems.length
+    tasksBetaContext = betaItems.length
       ? '\n\nВАЖНО: Следующие задачи уже были в Beta. Используй ТОЧНО ТЕ ЖЕ формулировки:\n' +
         betaItems.map(k => {
           const m = memory.find(m => m.key === k && m.build === 'beta');
@@ -557,13 +549,8 @@ async function generate(mode) {
         }).join('\n')
       : '';
 
-    const extra = document.getElementById('tasks-extra').value.trim();
-    const type = buildMode === 'beta' ? 'Beta' : 'Production';
-    const prompt = `Напиши ченджлог для MetaScalp ${type} Version ${version}.
-Задачи из Jira (finncraft.atlassian.net): ${keys.join(', ')}
-Прочитай каждую задачу через Jira и составь ченджлог.${betaContext}${extra ? '\n\nДоп. заметки:\n' + extra : ''}`;
-
-    content = [{ type: 'text', text: prompt }];
+    // Контент соберём внутри try — сначала нужно прочитать задачи из Jira
+    content = null;
     loadingMsg.textContent = `Читаю задачи: ${keys.join(', ')}...`;
 
   } else if (mode === 'pdf') {
@@ -604,6 +591,30 @@ async function generate(mode) {
     const isTasks = mode === 'tasks';
     const examples = await getFeedbackExamples();
 
+    if (isTasks) {
+      // Читаем задачи через воркер (Jira REST), содержимое кладём прямо в промпт
+      const keys = lastTaskKeys;
+      const jr = await fetch(`${WORKER}/jira?keys=${encodeURIComponent(keys.join(','))}`);
+      if (!jr.ok) throw new Error('Не удалось получить задачи из Jira (HTTP ' + jr.status + ')');
+      const { issues } = await jr.json();
+      const notFound = issues.filter(i => i.error).map(i => `${i.key} (${i.error})`);
+      if (notFound.length === issues.length) throw new Error('Ни одна задача не найдена в Jira: ' + notFound.join(', '));
+      const taskBlock = issues.filter(i => !i.error).map(i =>
+        `${i.key} [${i.type || 'задача'}, статус: ${i.status || '?'}]\n${i.summary}${i.description ? '\n' + i.description : ''}`
+      ).join('\n\n---\n\n');
+
+      const version = lastVersion;
+      const type = buildMode === 'beta' ? 'Beta' : 'Production';
+      const extra = document.getElementById('tasks-extra').value.trim();
+      const prompt = `Напиши ченджлог для MetaScalp ${type} Version ${version}.
+
+Задачи из Jira:
+
+${taskBlock}${notFound.length ? '\n\n(Задачи не найдены, пропусти их: ' + notFound.join(', ') + ')' : ''}${tasksBetaContext}${extra ? '\n\nДоп. заметки:\n' + extra : ''}`;
+      content = [{ type: 'text', text: prompt }];
+      loadingMsg.textContent = 'Генерирую ченджлог...';
+    }
+
     const body = {
       model: 'claude-sonnet-4-20250514',
       max_tokens: 1000,
@@ -611,11 +622,7 @@ async function generate(mode) {
       messages: [{ role: 'user', content }]
     };
 
-    if (isTasks) {
-      body.mcp_servers = [{ type: 'url', url: 'https://mcp.atlassian.com/v1/mcp', name: 'atlassian-mcp' }];
-    }
-
-    const resp = await fetch('https://metascalp-changelog.asya-minasyan.workers.dev/v1/messages', {
+    const resp = await fetch(`${WORKER}/v1/messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
@@ -720,10 +727,10 @@ async function renderMemory() {
   `).join('');
 }
 
-function deleteMemory(i) {
-  const m = getMemory();
+async function deleteMemory(i) {
+  const m = await getMemory();
   m.splice(i, 1);
-  saveMemory(m);
+  await saveMemory(m);
   renderMemory();
 }
 
