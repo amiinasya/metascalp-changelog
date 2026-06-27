@@ -81,7 +81,6 @@ textarea { resize: vertical; min-height: 90px; line-height: 1.6; }
 .build-btn { flex: 1; padding: 9px; border-radius: 7px; border: 1px solid var(--border); background: var(--bg3); color: var(--text2); font-family: 'JetBrains Mono', monospace; font-size: 12px; cursor: pointer; transition: all .18s; text-align: center; }
 .build-btn.active-beta { background: rgba(240,180,41,0.1); border-color: var(--yellow); color: var(--yellow); }
 .build-btn.active-prod { background: rgba(39,201,143,0.1); border-color: var(--green); color: var(--green); }
-.build-btn.active-both { background: rgba(124,109,250,0.12); border-color: var(--accent); color: var(--accent); }
 
 /* Upload */
 .upload-zone { border: 1.5px dashed var(--border); border-radius: var(--r); padding: 32px; text-align: center; cursor: pointer; transition: all .18s; position: relative; }
@@ -187,16 +186,7 @@ textarea { resize: vertical; min-height: 90px; line-height: 1.6; }
 
     <div class="card">
       <div class="card-label">Версия релиза</div>
-      <div class="row2" id="tasks-version-row" style="display:block">
-        <div class="field">
-          <label id="tasks-vl-beta" style="display:none">Beta</label>
-          <input type="text" id="tasks-version" placeholder="1.0.250" oninput="onVersionInput()">
-        </div>
-        <div class="field" id="tasks-vf-prod" style="display:none">
-          <label>Production</label>
-          <input type="text" id="tasks-version-prod" placeholder="1.0.251">
-        </div>
-      </div>
+      <input type="text" id="tasks-version" placeholder="1.0.250" oninput="onVersionInput()">
     </div>
 
     <div class="card">
@@ -230,16 +220,7 @@ textarea { resize: vertical; min-height: 90px; line-height: 1.6; }
 
     <div class="card">
       <div class="card-label">Версия релиза</div>
-      <div class="row2" id="pdf-version-row" style="display:block">
-        <div class="field">
-          <label id="pdf-vl-beta" style="display:none">Beta</label>
-          <input type="text" id="pdf-version" placeholder="1.0.250">
-        </div>
-        <div class="field" id="pdf-vf-prod" style="display:none">
-          <label>Production</label>
-          <input type="text" id="pdf-version-prod" placeholder="1.0.251">
-        </div>
-      </div>
+      <input type="text" id="pdf-version" placeholder="1.0.250">
     </div>
 
     <div class="card">
@@ -329,26 +310,34 @@ let pdfBase64 = null;
 let lastTaskKeys = [];
 let lastBuildMode = '';
 let lastVersion = '';
-let lastVersionProd = '';
 let lastResultText = '';
 
 // Memory: { key: string (MET-XXX), build: 'beta'|'prod', text: string, version: string }[]
-// ─── Storage через воркер (токены живут в секретах Cloudflare) ───
-const WORKER = window.WORKER_URL || 'https://metascalp-changelog.asya-minasyan.workers.dev';
+// ─── GitHub storage ──────────────────────────────────────
+const GH_API = 'https://api.github.com';
 
 async function ghGet(path) {
+  const token = window.GH_TOKEN;
+  const repo = window.GH_REPO;
   try {
-    const r = await fetch(`${WORKER}/storage/${path.replace('data/','')}`);
+    const r = await fetch(`${GH_API}/repos/${repo}/contents/${path}`, {
+      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' }
+    });
     if (!r.ok) return null;
-    return await r.json(); // { content, sha }
+    const d = await r.json();
+    return { content: JSON.parse(atob(d.content.replace(/\n/g,''))), sha: d.sha };
   } catch { return null; }
 }
 
 async function ghSave(path, data, sha) {
-  await fetch(`${WORKER}/storage/${path.replace('data/','')}`, {
+  const token = window.GH_TOKEN;
+  const repo = window.GH_REPO;
+  const body = { message: 'update ' + path, content: btoa(unescape(encodeURIComponent(JSON.stringify(data, null, 2)))) };
+  if (sha) body.sha = sha;
+  await fetch(`${GH_API}/repos/${repo}/contents/${path}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ data, sha })
+    headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
   });
 }
 
@@ -403,10 +392,6 @@ function setBuild(mode) {
   document.getElementById('btn-beta').className = 'build-btn' + (mode === 'beta' ? ' active-beta' : '');
   document.getElementById('btn-prod').className = 'build-btn' + (mode === 'prod' ? ' active-prod' : '');
   document.getElementById('btn-both').className = 'build-btn' + (mode === 'both' ? ' active-both' : '');
-  const both = mode === 'both';
-  document.getElementById('tasks-version-row').style.display = both ? 'grid' : 'block';
-  document.getElementById('tasks-vl-beta').style.display = both ? 'block' : 'none';
-  document.getElementById('tasks-vf-prod').style.display = both ? 'flex' : 'none';
   onVersionInput();
 }
 
@@ -415,10 +400,6 @@ function setBuildPdf(mode) {
   document.getElementById('btn-beta-pdf').className = 'build-btn' + (mode === 'beta' ? ' active-beta' : '');
   document.getElementById('btn-prod-pdf').className = 'build-btn' + (mode === 'prod' ? ' active-prod' : '');
   document.getElementById('btn-both-pdf').className = 'build-btn' + (mode === 'both' ? ' active-both' : '');
-  const both = mode === 'both';
-  document.getElementById('pdf-version-row').style.display = both ? 'grid' : 'block';
-  document.getElementById('pdf-vl-beta').style.display = both ? 'block' : 'none';
-  document.getElementById('pdf-vf-prod').style.display = both ? 'flex' : 'none';
 }
 
 // ─── Version input — check beta memory ──────────────────
@@ -553,28 +534,22 @@ async function generate(mode) {
 
   // Validate & build message
   let content = null;
-  let tasksBetaContext = '';
   let errId = mode + '-err';
   hideErr(errId);
 
   if (mode === 'tasks') {
     const version = document.getElementById('tasks-version').value.trim();
-    const versionProd = buildMode === 'both' ? document.getElementById('tasks-version-prod').value.trim() : '';
     const keys = getTaskKeys();
-    if (!version || (buildMode === 'both' && !versionProd)) {
-      showErr('tasks-err', buildMode === 'both' ? 'Укажи версии для Beta и Production' : 'Укажи версию релиза');
-      return;
-    }
+    if (!version) { showErr('tasks-err', 'Укажи версию релиза'); return; }
     if (!keys.length) { showErr('tasks-err', 'Введи хотя бы один номер задачи'); return; }
 
     lastTaskKeys = keys;
     lastBuildMode = buildMode;
     lastVersion = version;
-    lastVersionProd = versionProd;
 
     const memory = await getMemory();
     const betaItems = keys.filter(k => memory.find(m => m.key === k && m.build === 'beta'));
-    tasksBetaContext = betaItems.length
+    const betaContext = betaItems.length
       ? '\n\nВАЖНО: Следующие задачи уже были в Beta. Используй ТОЧНО ТЕ ЖЕ формулировки:\n' +
         betaItems.map(k => {
           const m = memory.find(m => m.key === k && m.build === 'beta');
@@ -582,29 +557,27 @@ async function generate(mode) {
         }).join('\n')
       : '';
 
-    // Контент соберём внутри try — сначала нужно прочитать задачи из Jira
-    content = null;
+    const extra = document.getElementById('tasks-extra').value.trim();
+    const type = buildMode === 'beta' ? 'Beta' : 'Production';
+    const prompt = `Напиши ченджлог для MetaScalp ${type} Version ${version}.
+Задачи из Jira (finncraft.atlassian.net): ${keys.join(', ')}
+Прочитай каждую задачу через Jira и составь ченджлог.${betaContext}${extra ? '\n\nДоп. заметки:\n' + extra : ''}`;
+
+    content = [{ type: 'text', text: prompt }];
     loadingMsg.textContent = `Читаю задачи: ${keys.join(', ')}...`;
 
   } else if (mode === 'pdf') {
     const version = document.getElementById('pdf-version').value.trim();
-    const versionProd = buildModePdf === 'both' ? document.getElementById('pdf-version-prod').value.trim() : '';
-    if (!version || (buildModePdf === 'both' && !versionProd)) {
-      showErr('pdf-err', buildModePdf === 'both' ? 'Укажи версии для Beta и Production' : 'Укажи версию релиза');
-      return;
-    }
+    if (!version) { showErr('pdf-err', 'Укажи версию релиза'); return; }
     if (!pdfBase64) { showErr('pdf-err', 'Загрузи PDF'); return; }
 
     lastBuildMode = buildModePdf;
     lastVersion = version;
-    lastVersionProd = versionProd;
     lastTaskKeys = [];
 
+    const type = buildModePdf === 'beta' ? 'Beta' : 'Production';
     const extra = document.getElementById('pdf-extra').value.trim();
-    const intro = buildModePdf === 'both'
-      ? `Напиши по этому PDF два ченджлога с одинаковым списком изменений:\n1) MetaScalp Beta Version ${version}\n2) MetaScalp Production Version ${versionProd}\nСначала Beta, затем Production, между ними пустая строка и строка "———".`
-      : `Напиши ченджлог для MetaScalp ${buildModePdf === 'beta' ? 'Beta' : 'Production'} Version ${version} по этому PDF.`;
-    const prompt = `${intro}${extra ? '\n\nДоп. заметки:\n' + extra : ''}`;
+    const prompt = `Напиши ченджлог для MetaScalp ${type} Version ${version} по этому PDF.${extra ? '\n\nДоп. заметки:\n' + extra : ''}`;
     content = [
       { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: pdfBase64 } },
       { type: 'text', text: prompt }
@@ -631,39 +604,18 @@ async function generate(mode) {
     const isTasks = mode === 'tasks';
     const examples = await getFeedbackExamples();
 
-    if (isTasks) {
-      // Читаем задачи через воркер (Jira REST), содержимое кладём прямо в промпт
-      const keys = lastTaskKeys;
-      const jr = await fetch(`${WORKER}/jira?keys=${encodeURIComponent(keys.join(','))}`);
-      if (!jr.ok) throw new Error('Не удалось получить задачи из Jira (HTTP ' + jr.status + ')');
-      const { issues } = await jr.json();
-      const notFound = issues.filter(i => i.error).map(i => `${i.key} (${i.error})`);
-      if (notFound.length === issues.length) throw new Error('Ни одна задача не найдена в Jira: ' + notFound.join(', '));
-      const taskBlock = issues.filter(i => !i.error).map(i =>
-        `${i.key} [${i.type || 'задача'}, статус: ${i.status || '?'}]\n${i.summary}${i.description ? '\n' + i.description : ''}`
-      ).join('\n\n---\n\n');
-
-      const extra = document.getElementById('tasks-extra').value.trim();
-      const intro = buildMode === 'both'
-        ? `Напиши два ченджлога с одинаковым списком изменений:\n1) MetaScalp Beta Version ${lastVersion}\n2) MetaScalp Production Version ${lastVersionProd}\nСначала Beta, затем Production, между ними пустая строка и строка "———".`
-        : `Напиши ченджлог для MetaScalp ${buildMode === 'beta' ? 'Beta' : 'Production'} Version ${lastVersion}.`;
-      const prompt = `${intro}
-
-Задачи из Jira:
-
-${taskBlock}${notFound.length ? '\n\n(Задачи не найдены, пропусти их: ' + notFound.join(', ') + ')' : ''}${tasksBetaContext}${extra ? '\n\nДоп. заметки:\n' + extra : ''}`;
-      content = [{ type: 'text', text: prompt }];
-      loadingMsg.textContent = 'Генерирую ченджлог...';
-    }
-
     const body = {
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 2000,
+      max_tokens: 1000,
       system: isAnnounce ? buildAnnounceSystem() : buildSystem(examples),
       messages: [{ role: 'user', content }]
     };
 
-    const resp = await fetch(`${WORKER}/v1/messages`, {
+    if (isTasks) {
+      body.mcp_servers = [{ type: 'url', url: 'https://mcp.atlassian.com/v1/mcp', name: 'atlassian-mcp' }];
+    }
+
+    const resp = await fetch('https://quiet-cloud-1c59.asya-minasyan.workers.dev/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
@@ -707,18 +659,16 @@ async function saveToMemory(mode, fullText) {
   if (!lastTaskKeys.length && mode !== 'pdf') return;
   const memory = await getMemory();
   const build = mode === 'tasks_beta' ? 'beta' : mode === 'tasks_prod' ? 'prod' : lastBuildMode;
-  // В режиме Beta + Prod у каждой сборки своя версия
-  const ver = (build === 'prod' && lastBuildMode === 'both') ? lastVersionProd : lastVersion;
 
   if (lastTaskKeys.length) {
     lastTaskKeys.forEach(key => {
       const exists = memory.findIndex(m => m.key === key && m.build === build);
-      const entry = { key, build, version: ver, text: fullText, ts: Date.now() };
+      const entry = { key, build, version: lastVersion, text: fullText, ts: Date.now() };
       if (exists >= 0) memory[exists] = entry;
       else memory.unshift(entry);
     });
   } else {
-    const entry = { key: `PDF v${ver}`, build, version: ver, text: fullText, ts: Date.now() };
+    const entry = { key: `PDF v${lastVersion}`, build, version: lastVersion, text: fullText, ts: Date.now() };
     memory.unshift(entry);
   }
 
@@ -770,10 +720,10 @@ async function renderMemory() {
   `).join('');
 }
 
-async function deleteMemory(i) {
-  const m = await getMemory();
+function deleteMemory(i) {
+  const m = getMemory();
   m.splice(i, 1);
-  await saveMemory(m);
+  saveMemory(m);
   renderMemory();
 }
 
