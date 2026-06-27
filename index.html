@@ -605,7 +605,7 @@ async function generate(mode) {
     const examples = await getFeedbackExamples();
 
     const body = {
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 1000,
       system: isAnnounce ? buildAnnounceSystem() : buildSystem(examples),
       messages: [{ role: 'user', content }]
